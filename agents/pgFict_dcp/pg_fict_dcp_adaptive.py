@@ -29,7 +29,6 @@ import torch
 import torch.nn as nn
 import networkx as nx
 from tensorboardX import SummaryWriter
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # pdb.Pdb.complete = rlcompleter.Completer(locals()).complete
 # pdb.set_trace()
@@ -84,11 +83,11 @@ class cost(nn.Module):
     def forward(self, x, dtPt):
 
         #nt is a tensor with shape (-1, self.totalZONES)
-        nt = tc.tensor(x, device=device).float()
+        nt = tc.tensor(x).float()
         dtPt = nt.shape[0]
 
         layerIdx = 0
-        output = tc.tensor([], device=device)
+        output = tc.tensor([])
 
         for z in range(self.totalZONES):
             x = nt[:, z].unsqueeze(1)
@@ -161,10 +160,10 @@ class actor(nn.Module):
     def forward(self, x, dtPt):
 
 
-        nt = tc.tensor(x, device=device).float()
+        nt = tc.tensor(x).float()
         dtPt = nt.shape[0]
         layerIdx = 0
-        output = tc.tensor([], device=device)
+        output = tc.tensor([])
 
 
         for z in range(self.totalZONES):
@@ -219,10 +218,8 @@ class pg_fict_dcp:
         # self.instance = instance
         # self.actor = actor(data.totalZONES, data.Mask)
         self.actor = actor(data.totalZONES, seed)
-        self.actor.to(device)
-        # self.actor_target = actor(data.totalZONES, seed)
+        self.actor_target = actor(data.totalZONES, seed)
         self.cost = cost(data.totalZONES, seed)
-        self.cost.to(device)
 
         self.dirName = dirName
         self.FileName = FileName
@@ -236,17 +233,17 @@ class pg_fict_dcp:
             #load cost model
 
         self.optimizer = tc.optim.Adam(self.actor.parameters(), lr=LEARNING_RATE)
-        # self.optimizer_target = tc.optim.Adam(self.actor_target.parameters(), lr=LEARNING_RATE)
+        self.optimizer_target = tc.optim.Adam(self.actor_target.parameters(), lr=LEARNING_RATE)
         self.optimizer_meta = tc.optim.Adam(self.cost.parameters(), lr=0.01)
         self.create_train_parameters()
         self.writer = SummaryWriter(logdir = writerSavePath)
         self.loss = 0
 
-        self.loss1 = []
-        self.loss2 = []
+        self.loss1 = [[] for _  in range(self.totalZONES) ]
+        self.loss2 = [[] for _  in range(self.totalZONES) ]
 
-        self.loss1_ratio = []
-        self.loss2_ratio = []
+        self.loss1_ratio = [[] for _  in range(self.totalZONES) ]
+        self.loss2_ratio = [[] for _  in range(self.totalZONES) ]
 
         i = 0
         self.layer_hash = {}
@@ -286,7 +283,7 @@ class pg_fict_dcp:
                             if tau_p < HORIZON:
                                 self.tau_p_t_tmin[tmpDataPt][z][zp][tau_p] = tau_p - t - tMin_zz
                 tmpDataPt += 1
-        self.tau_p_t_tmin = tc.tensor(self.tau_p_t_tmin, device=device)
+        self.tau_p_t_tmin = tc.tensor(self.tau_p_t_tmin)
         # Tmax_zz - tau' + t
         self.tmax_taup_t = np.zeros((self.dataPt, self.totalZONES, self.totalZONES, HORIZON + 1))
         tmpDataPt = 0
@@ -300,7 +297,7 @@ class pg_fict_dcp:
                             if tau_p < HORIZON:
                                 self.tmax_taup_t[tmpDataPt][z][zp][tau_p] = tMax_zz - tau_p + t
                 tmpDataPt += 1
-        self.tmax_taup_t = tc.tensor(self.tmax_taup_t, device=device)
+        self.tmax_taup_t = tc.tensor(self.tmax_taup_t)
 
 
     def getBeta(self, cT, i_episode):
@@ -311,8 +308,7 @@ class pg_fict_dcp:
 
         # pdb.Pdb.complete = rlcompleter.Completer(locals()).complete
         # pdb.set_trace()
-        
-        beta_t = beta_t.to('cpu')
+
         return beta_t.data.numpy()
 
     def getCost(self, cT, i_episode):
@@ -323,8 +319,7 @@ class pg_fict_dcp:
 
         # pdb.Pdb.complete = rlcompleter.Completer(locals()).complete
         # pdb.set_trace()
- 
-        cost_t = cost_t.to('cpu')
+
         return cost_t.data.numpy()
 
     def clear(self):
@@ -340,8 +335,8 @@ class pg_fict_dcp:
         # y_target = tc.tensor(np.array(self.target)).float()
 
         x = np.array(self.nt_z_1hot)
-        ntzztau = tc.tensor(np.array(self.ntz_zt), device=device)
-        Adv = tc.tensor(np.array(self.Q), device=device)
+        ntzztau = tc.tensor(np.array(self.ntz_zt))
+        Adv = tc.tensor(np.array(self.Q))
 
 
         dtPt = x.shape[0]
@@ -352,7 +347,7 @@ class pg_fict_dcp:
         beta_log = tc.reshape(beta_log, (dtPt, self.totalZONES, self.totalZONES, 1))
 
         # ---- log(1 - xi^t_zz)
-        ones = tc.ones((dtPt, self.totalZONES, self.totalZONES), device = device)
+        ones = tc.ones((dtPt, self.totalZONES, self.totalZONES))
         one_beta = tc.sub(ones, beta)
         one_beta_log = tc.log(tc.add(one_beta, TINY))
         one_beta_log = tc.reshape(one_beta_log, (dtPt, self.totalZONES, self.totalZONES, 1))
@@ -378,46 +373,46 @@ class pg_fict_dcp:
         self.loss = float(loss.data)
         self.optimizer.zero_grad()
         loss.backward()
-        # pg_loss_grad = {}
-        # for z in self.planningZONES:
-        #     for zp in nx.neighbors(self.zGraph, z):
-        #         pg_loss_grad[(z, zp)] = []
-        #         indx = self.layer_hash[(z, zp)]
-        #         pg_loss_grad[(z, zp)].append(self.actor.linear1[indx].weight.grad)     
-        #         pg_loss_grad[(z, zp)].append(self.actor.linear1[indx].bias.grad)     
-        #         pg_loss_grad[(z, zp)].append(self.actor.linear2[indx].weight.grad)     
-        #         pg_loss_grad[(z, zp)].append(self.actor.linear2[indx].bias.grad)  
-        #         pg_loss_grad[(z, zp)].append(self.actor.beta[indx].weight.grad)     
-        #         pg_loss_grad[(z, zp)].append(self.actor.beta[indx].bias.grad)  
+        pg_loss_grad = {}
+        for z in self.planningZONES:
+            for zp in nx.neighbors(self.zGraph, z):
+                pg_loss_grad[(z, zp)] = []
+                indx = self.layer_hash[(z, zp)]
+                pg_loss_grad[(z, zp)].append(self.actor.linear1[indx].weight.grad)     
+                pg_loss_grad[(z, zp)].append(self.actor.linear1[indx].bias.grad)     
+                pg_loss_grad[(z, zp)].append(self.actor.linear2[indx].weight.grad)     
+                pg_loss_grad[(z, zp)].append(self.actor.linear2[indx].bias.grad)  
+                pg_loss_grad[(z, zp)].append(self.actor.beta[indx].weight.grad)     
+                pg_loss_grad[(z, zp)].append(self.actor.beta[indx].bias.grad)  
 
-        # pg_loss_grad_norm = {}
-        # for z in self.planningZONES:
-        #     for zp in nx.neighbors(self.zGraph, z):
-        #         grad_norm = 0
-        #         for grad in pg_loss_grad[(z, zp)]:
-        #             # print(grad1, grad2)
-        #             grad_norm += tc.norm(grad)
+        pg_loss_grad_norm = {}
+        for z in self.planningZONES:
+            for zp in nx.neighbors(self.zGraph, z):
+                grad_norm = 0
+                for grad in pg_loss_grad[(z, zp)]:
+                    # print(grad1, grad2)
+                    grad_norm += tc.norm(grad)
 
-        #         pg_loss_grad_norm[(z,zp)] = grad_norm / len(pg_loss_grad[(z, zp)])
+                pg_loss_grad_norm[(z,zp)] = grad_norm / len(pg_loss_grad[(z, zp)])
 
 
         self.optimizer.step()
 
-        return None
+        return pg_loss_grad_norm
 
 
 
     def trainMeta(self, i_episode, buffer_nt_z, buffer_ntz_zt):
         #compute pg_loss1 w.r.t new policy parameters
         x = np.array(self.nt_z_1hot)
-        ntzztau = tc.tensor(np.array(self.ntz_zt), device=device)
+        ntzztau = tc.tensor(np.array(self.ntz_zt))
 
 
-        buffer_nt_z = tc.tensor(buffer_nt_z,dtype=torch.float32, device=device)
-        buffer_ntz_zt = tc.tensor(buffer_ntz_zt, dtype=torch.float32, device=device)
+        buffer_nt_z = tc.tensor(buffer_nt_z,dtype=torch.float32)
+        buffer_ntz_zt = tc.tensor(buffer_ntz_zt, dtype=torch.float32)
         #compute cummulative cost for updateing meta parameters
         learnedUnit = self.cost(x, x.shape[0])
-        rCap = tc.tensor(self.rCap, device=device)
+        rCap = tc.tensor(self.rCap)
 
         learnedCost = tc.relu(tc.sub(learnedUnit, tc.div(rCap, tc.add(buffer_nt_z, TINY))))
         learnedCostTotal = tc.relu(tc.sub(tc.mul(learnedUnit, buffer_nt_z), rCap))
@@ -456,7 +451,7 @@ class pg_fict_dcp:
 
         
         #-------------------------------- #
-        R_z_t_zp_tp = tc.zeros((self.totalZONES, HORIZON, self.totalZONES, HORIZON + 1), device = device)
+        R_z_t_zp_tp = tc.zeros(self.totalZONES, HORIZON, self.totalZONES, HORIZON + 1)
         for t in range(HORIZON):
             for z in self.planningZONES:
                 tau = t
@@ -466,8 +461,8 @@ class pg_fict_dcp:
                     for tau_p in range(t + tmin, min(t + tmax + 1, HORIZON+1)):
                         R_z_t_zp_tp[z][tau][zp][tau_p] = tc.sum(learnedCost[t:tau_p+1, z])
  
-        q_tmp = tc.zeros((self.totalZONES, HORIZON, self.totalZONES, HORIZON + 1), device = device)
-        self.V = tc.zeros((self.totalZONES, HORIZON + 1), device = device)
+        q_tmp = tc.zeros(self.totalZONES, HORIZON, self.totalZONES, HORIZON + 1)
+        self.V = tc.zeros(self.totalZONES, HORIZON + 1)
         for tau in range(HORIZON - 1, -1, -1):
             for z in self.planningZONES:
                 for z_p in nx.neighbors(self.zGraph, z):
@@ -494,36 +489,48 @@ class pg_fict_dcp:
         
         loss_meta = 0
         for z in self.planningZONES:
-            loss_tmp = 0
+            loss1_tmp = 0
             for zp in nx.neighbors(self.zGraph, z):
                 # print(qValues[z][zp])
                 # print( grad_total[(z,zp)])
-                loss_tmp += qValues[z][zp] * self.myLambda[z]
+                loss1_tmp += qValues[z][zp] * self.myLambda[z]
             
                 
             # loss_meta += - loss_tmp + self.myXi[z] * tc.mean(tc.square(learnedCount[:,z] - buffer_nt_z[:,z]) ) 
             # loss_meta += - loss_tmp  + 0 * tc.mean(tc.square(learnedCost[:,z] - actualCost[:,z]) ) 
             # loss_meta += tc.mean(tc.square(learnedCost[:,z] - actualCost[:,z]) ) 
-            loss_meta +=  loss_tmp + self.myXi[z] * tc.mean(tc.square(learnedCostTotal[:,z] - actualCost[:,z])) 
 
-        # loss_1 = qValues[2][3] * self.myLambda_old[2]
-        # loss_2 = tc.mean(tc.square(learnedCostTotal[:,2] - actualCost[:,2]))
 
-        # self.loss1.append(loss_1.item())
-        # self.loss2.append(loss_2.item())
+            loss2_tmp = tc.mean(tc.square(learnedCostTotal[:,z] - actualCost[:,z])) 
 
-        # if len(self.loss1) > 2:
-        #     self.loss1_ratio.append(self.loss1[-1]/(1e-8+np.mean(self.loss1[:-1])))  
-        #     self.loss2_ratio.append(self.loss2[-1]/(1e-8+np.mean(self.loss2[:-1])))  
+            if z in [4,5,6,7]:
+                c1 = 0.01
+                c2 = 0.99
+            else:
 
-        # if len(self.loss1) <= 3:
-        #     c1 = 0.01
-        #     c2 = 0.99
-        # else:
-        #     c1_temp = np.std(self.loss1_ratio)/(1e-8+np.mean(self.loss1_ratio))
-        #     c2_temp = np.std(self.loss2_ratio)/(1e-8+np.mean(self.loss2_ratio))
-        #     c1 = c1_temp / (c1_temp+c2_temp)
-        #     c2 = c2_temp / (c1_temp+c2_temp)
+                self.loss1[z].append(loss1_tmp.item())
+                self.loss2[z].append(loss2_tmp.item())
+
+                if len(self.loss1[z]) > 2:
+                    self.loss1_ratio[z].append(self.loss1[z][-1]/(1e-8+np.mean(self.loss1[z][:-1])))  
+                    self.loss2_ratio[z].append(self.loss1[z][-1]/(1e-8+np.mean(self.loss1[z][:-1])))  
+
+
+                if len(self.loss1[z]) <= 3:
+                    c1 = 0.01
+                    c2 = 0.99
+                else:
+                    c1_temp = np.std(self.loss1_ratio[z])/(1e-8+np.mean(self.loss1_ratio[z]))
+                    c2_temp = np.std(self.loss2_ratio[z])/(1e-8+np.mean(self.loss2_ratio[z]))
+                    c1 = c1_temp / (c1_temp+c2_temp)
+                    c2 = c2_temp / (c1_temp+c2_temp)
+
+
+            loss_meta +=  c1 * loss1_tmp + c2 * loss2_tmp
+
+
+
+
 
         #loss_meta = qValues[2][3] * self.myLambda_old[2] + self.myXi[2] * tc.mean(tc.square(learnedCostTotal[:,2] - actualCost[:,2])) 
         # loss_meta = c1 * qValues[2][3] * self.myLambda_old[2] + c2 * tc.mean(tc.square(learnedCostTotal[:,2] - actualCost[:,2])) 
@@ -645,8 +652,7 @@ class pg_fict_dcp:
 
         #compute pg_loss1 w.r.t new policy parameters
         x = np.array(self.nt_z_1hot)
-        learnedUnit = self.cost(x, x.shape[0])
-        learnedUnit = learnedUnit.to('cpu').detach().numpy()
+        learnedUnit = self.cost(x, x.shape[0]).detach().numpy()
         #can use self.rCap 
         #use learned 
         batchSize = int(len(self.nt_z_1hot) / HORIZON)

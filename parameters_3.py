@@ -4,13 +4,13 @@ SEED = 1
 AGENT = 'pg_fict_dcp'
 # AGENT = 'tmin'
 # +++++++ Experiment +++++++ #
-EPISODES = 10
+EPISODES = 10000
 SHOULD_LOG = 1
 SAMPLE_AVG = 1
-BATCH_SIZE = 1 #one horizon 
+BATCH_SIZE = 1
 TOTAL_RUNTIME = 1 * 24 * 3600
 LEARNING_RATE = 1e-3
-LEARNING_RATE_LAMBDA = 1e-3
+LEARNING_RATE_LAMBDA = 1e-4
 OPTIMIZER = 'adam'
 SAVE_MODEL = 1
 LOAD_MODEL = False
@@ -18,18 +18,16 @@ LOAD_MODEL = False
 
 # +++++++ Synthetic-Instance ++++++ #
 INSTANCE = 1
-#modify here
 wDelay = 1
 wResource = 0
 
 # +++++++++ Discrete Settings +++++++++ #
 NUM_ACTIONS = 10
 
-
 # +++++++++ MAP +++++++++ #
-TOTAL_VESSEL = 150
-MAP_ID = "5_3"
-HORIZON = 50
+TOTAL_VESSEL = 160
+MAP_ID = "3_2"
+HORIZON = 30
 
 # Travel Time
 T_MIN = 2
@@ -94,10 +92,10 @@ RENDER = False
 
 # ++++ Pytorch ++++ #
 WEIGHT_VARIANCE = 0.02
+# WEIGHT_VARIANCE = 1
 GRADIENT_CLIP = 5
 NUM_CORES = 1
 DROPOUT = 0.6
-#change here I didn't use discount factor
 DISCOUNT = 1
 CLIP = 5
 EPS_START = 0.9
@@ -110,5 +108,4 @@ OPENBLAS = 1
 OMP = 1
 MKL = 1
 NUMEXPR = 1
-
 
